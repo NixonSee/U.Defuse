@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* Custom animations for glowing effects */
+@keyframes borderPulse {
+  0% {
+    box-shadow: 0 0 5px rgba(255, 255, 0, 0.3), 0 0 10px rgba(255, 255, 0, 0.2), 0 0 15px rgba(255, 255, 0, 0.1);
+    border-color: rgba(255, 255, 0, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 10px rgba(255, 255, 0, 0.5), 0 0 20px rgba(255, 255, 0, 0.3), 0 0 30px rgba(255, 255, 0, 0.2);
+    border-color: rgba(255, 255, 0, 0.6);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(255, 255, 0, 0.4), 0 0 10px rgba(255, 255, 0, 0.3), 0 0 15px rgba(255, 255, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(255, 255, 0, 0.6), 0 0 20px rgba(255, 255, 0, 0.4), 0 0 30px rgba(255, 255, 0, 0.3);
+  }
+}
+
+@keyframes backgroundGlow {
+  0%, 100% {
+    background: radial-gradient(circle at center, rgba(255, 255, 0, 0.05) 0%, transparent 30%);
+  }
+  50% {
+    background: radial-gradient(circle at center, rgba(255, 255, 0, 0.1) 0%, transparent 40%);
+  }
+}
+
+.animate-borderPulse {
+  animation: borderPulse 2s ease-in-out infinite alternate;
+}
+
+.animate-glowPulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+.animate-backgroundGlow {
+  animation: backgroundGlow 4s ease-in-out infinite;
+}
+
+/* Light Mode Theme */
+.light-mode {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --accent: #d4a700;
+}
+
+.light-mode body,
+.light-mode #root {
+  background-color: #f0f0f0 !important;
+}
+
+.light-mode .bg-\[\#060606\] {
+  background-color: #ffffff !important;
+}
+
+.light-mode .bg-\[\#0d0d0f\]\/80 {
+  background-color: rgba(245, 245, 245, 0.95) !important;
+}
+
+.light-mode .text-yellow-400,
+.light-mode .text-yellow-300 {
+  color: #d4a700 !important;
+}
+
+.light-mode .text-gray-400,
+.light-mode .text-gray-300 {
+  color: #666666 !important;
+}
+
+.light-mode .border-yellow-400\/20,
+.light-mode .border-yellow-400\/40 {
+  border-color: rgba(212, 167, 0, 0.3) !important;
+}
+
+.light-mode .bg-yellow-400\/90 {
+  background-color: rgba(212, 167, 0, 0.95) !important;
+}
+
+.light-mode .bg-yellow-400\/10,
+.light-mode .bg-yellow-400\/20 {
+  background-color: rgba(212, 167, 0, 0.15) !important;
+}
