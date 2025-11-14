@@ -53,8 +53,6 @@ coverage/
 # Vercel
 .vercel
 
-# Ngrok
-ngrok.yml
 
 # Debug
 npm-debug.log*

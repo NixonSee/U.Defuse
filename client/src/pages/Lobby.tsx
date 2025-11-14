@@ -84,6 +84,19 @@ const Lobby: React.FC = () => {
         setMessages(prev => [...prev, data]);
       });
 
+      socketService.onGameStarted((data) => {
+        console.log("🎮 Game started!", data);
+        // Navigate to game dashboard with game state
+        navigate('/game-dashboard', {
+          state: {
+            gameSessionId: data.gameSessionId,
+            roomCode: data.roomCode,
+            players: data.players,
+            currentTurn: data.currentTurn
+          }
+        });
+      });
+
       // Request current player list after setting up listeners
       setTimeout(() => {
         console.log("📋 Requesting player list after connection setup...");

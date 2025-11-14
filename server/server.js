@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import authRoutes from "./routes/auth.js";
+import gameService from "./services/gameService.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -20,17 +21,22 @@ const __dirname = path.dirname(__filename);
 const io = new Server(httpServer, {
   cors: {
     origin: (origin, callback) => {
+      const envOrigins = [process.env.CLIENT_ORIGIN, process.env.CLIENT_ORIGIN2].filter(Boolean);
       // Allow localhost, local network IPs, and Vercel domains
       const allowedOrigins = [
         /^http:\/\/localhost:5173$/,
         /^http:\/\/127\.0\.0\.1:5173$/,
         /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:5173$/,
         /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/,
-        /^https:\/\/.*\.vercel\.app$/,  // Vercel production domains
-        /^https:\/\/.*-.*\.vercel\.app$/ // Vercel preview deployments
+        /^https:\/\/.*\.vercel\.app$/,
+        /^https:\/\/.*-.*\.vercel\.app$/
       ];
       
-      if (!origin || allowedOrigins.some(pattern => pattern.test(origin))) {
+      if (
+        !origin ||
+        envOrigins.includes(origin) ||
+        allowedOrigins.some(pattern => pattern.test(origin))
+      ) {
         callback(null, true);
       } else {
         console.log('❌ CORS blocked origin:', origin);
@@ -45,17 +51,21 @@ const io = new Server(httpServer, {
 // Configure CORS with credentials - Allow Vercel domains and local network
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow localhost, local network IPs, and Vercel domains
+    const envOrigins = [process.env.CLIENT_ORIGIN, process.env.CLIENT_ORIGIN2].filter(Boolean);
     const allowedOrigins = [
       /^http:\/\/localhost:5173$/,
       /^http:\/\/127\.0\.0\.1:5173$/,
       /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:5173$/,
       /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/,
-      /^https:\/\/.*\.vercel\.app$/,  // Vercel production domains
-      /^https:\/\/.*-.*\.vercel\.app$/ // Vercel preview deployments
+      /^https:\/\/.*\.vercel\.app$/,
+      /^https:\/\/.*-.*\.vercel\.app$/
     ];
     
-    if (!origin || allowedOrigins.some(pattern => pattern.test(origin))) {
+    if (
+      !origin ||
+      envOrigins.includes(origin) ||
+      allowedOrigins.some(pattern => pattern.test(origin))
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -446,7 +456,7 @@ io.on("connection", (socket) => {
   });
 
   // Handle game start
-  socket.on("startGame", (data) => {
+  socket.on("startGame", async (data) => {
     const roomCode = socket.roomCode;
     if (!roomCode || !gameRooms.has(roomCode)) {
       return;
@@ -462,11 +472,237 @@ io.on("connection", (socket) => {
     
     console.log(`🎮 Host ${socket.username} starting game in room ${roomCode}`);
     
-    // Notify all players in the room that game is starting
-    io.to(roomCode).emit("gameStarted", {
-      roomCode,
-      players: room.players
-    });
+    try {
+      // Create game session in database
+      const playerCount = room.players.length;
+      const gameSessionId = await gameService.createGameSession(roomCode, 'survivor', playerCount);
+      
+      // Setup players with roles and initial cards
+      await gameService.setupPlayers(gameSessionId, room.players);
+      await gameService.dealInitialCards(gameSessionId);
+      await gameService.startGame(gameSessionId);
+      
+      // Get game state
+      const gameState = await gameService.getGameState(gameSessionId);
+      
+      // Store gameSessionId in room
+      room.gameSessionId = gameSessionId;
+      room.currentTurn = 0;
+      
+      console.log(`✅ Game session ${gameSessionId} created for room ${roomCode}`);
+      
+      // Notify all players in the room that game is started
+      io.to(roomCode).emit("gameStarted", {
+        roomCode,
+        gameSessionId,
+        players: gameState.players,
+        currentTurn: 0
+      });
+      
+      // Send individual hands to each player (private)
+      gameState.players.forEach(player => {
+        const playerSocket = io.sockets.sockets.get(room.players.find(p => p.id === player.user_id)?.socketId);
+        if (playerSocket) {
+          playerSocket.emit("yourHand", {
+            cards: player.hand_cards
+          });
+        }
+      });
+      
+    } catch (err) {
+      console.error("Error starting game:", err);
+      socket.emit("gameError", { message: "Failed to start game" });
+    }
+  });
+
+  // Handle bomb scan
+  socket.on("scanBomb", async (data) => {
+    const { gameSessionId } = data;
+    
+    try {
+      const result = await gameService.triggerBomb(gameSessionId, socket.userId);
+      
+      console.log(`💣 ${socket.username} scanned bomb! Timer: ${result.timerSeconds}s`);
+      
+      // Send quiz to player
+      socket.emit("bombQuiz", {
+        question: result.question,
+        timerSeconds: result.timerSeconds,
+        bonusTime: result.bonusTime
+      });
+      
+      // Notify room that player triggered bomb
+      if (socket.roomCode) {
+        io.to(socket.roomCode).emit("playerTriggeredBomb", {
+          playerId: socket.userId,
+          username: socket.username,
+          timerSeconds: result.timerSeconds
+        });
+      }
+      
+    } catch (err) {
+      console.error("Error triggering bomb:", err);
+      socket.emit("gameError", { message: "Failed to trigger bomb" });
+    }
+  });
+
+  // Handle quiz answer
+  socket.on("answerQuiz", async (data) => {
+    const { gameSessionId, questionId, answer, timeTaken, usedHackerAbility } = data;
+    
+    try {
+      const result = await gameService.defuseBomb(
+        gameSessionId,
+        socket.userId,
+        questionId,
+        answer,
+        timeTaken,
+        usedHackerAbility
+      );
+      
+      console.log(`${result.success ? '✅' : '❌'} ${socket.username} ${result.success ? 'defused' : 'failed'} bomb!`);
+      
+      // Send result to player
+      socket.emit("quizResult", result);
+      
+      // Update room with score
+      if (socket.roomCode) {
+        const gameState = await gameService.getGameState(gameSessionId);
+        io.to(socket.roomCode).emit("scoreUpdate", {
+          players: gameState.players
+        });
+        
+        if (result.success) {
+          io.to(socket.roomCode).emit("bombDefused", {
+            playerId: socket.userId,
+            username: socket.username,
+            scoreGained: result.scoreGained,
+            method: result.method || 'quiz'
+          });
+        }
+      }
+      
+    } catch (err) {
+      console.error("Error answering quiz:", err);
+      socket.emit("gameError", { message: "Failed to submit answer" });
+    }
+  });
+
+  // Handle Defuse card usage
+  socket.on("useDefuseCard", async (data) => {
+    const { gameSessionId } = data;
+    
+    try {
+      const result = await gameService.useDefuseCard(socket.userId);
+      
+      console.log(`🛡️ ${socket.username} used Defuse card! +${result.scoreGained} points`);
+      
+      // Send confirmation to player
+      socket.emit("defuseCardUsed", {
+        scoreGained: result.scoreGained
+      });
+      
+      // Update room
+      if (socket.roomCode) {
+        const gameState = await gameService.getGameState(gameSessionId);
+        io.to(socket.roomCode).emit("scoreUpdate", {
+          players: gameState.players
+        });
+        
+        io.to(socket.roomCode).emit("bombDefused", {
+          playerId: socket.userId,
+          username: socket.username,
+          scoreGained: result.scoreGained,
+          method: 'defuse_card'
+        });
+      }
+      
+    } catch (err) {
+      console.error("Error using Defuse card:", err);
+      socket.emit("gameError", { message: err.message });
+    }
+  });
+
+  // Handle player elimination
+  socket.on("playerEliminated", async (data) => {
+    const { gameSessionId } = data;
+    
+    try {
+      await gameService.eliminatePlayer(socket.userId);
+      
+      console.log(`💀 ${socket.username} eliminated!`);
+      
+      // Check if game ended
+      const endCheck = await gameService.checkGameEnd(gameSessionId);
+      
+      if (socket.roomCode) {
+        const gameState = await gameService.getGameState(gameSessionId);
+        
+        io.to(socket.roomCode).emit("playerEliminatedEvent", {
+          playerId: socket.userId,
+          username: socket.username,
+          players: gameState.players
+        });
+        
+        if (endCheck.ended) {
+          const winner = gameState.players.find(p => !p.is_eliminated) || 
+                        gameState.players.reduce((max, p) => p.score > max.score ? p : max);
+          
+          io.to(socket.roomCode).emit("gameEnded", {
+            winner: {
+              id: winner.user_id,
+              username: winner.username,
+              score: winner.score
+            },
+            reason: endCheck.reason,
+            finalScores: gameState.players
+          });
+        }
+      }
+      
+    } catch (err) {
+      console.error("Error eliminating player:", err);
+    }
+  });
+
+  // Handle Hacker ability
+  socket.on("useHackerAbility", async (data) => {
+    const { gameSessionId } = data;
+    
+    try {
+      // Check if player has Hacker role
+      const gameState = await gameService.getGameState(gameSessionId);
+      const player = gameState.players.find(p => p.user_id === socket.userId);
+      
+      if (!player || player.role !== 'hacker') {
+        socket.emit("gameError", { message: "You don't have the Hacker role" });
+        return;
+      }
+      
+      if (player.ability_used) {
+        socket.emit("gameError", { message: "Hacker ability already used" });
+        return;
+      }
+      
+      console.log(`🔓 ${socket.username} used Hacker ability!`);
+      
+      // Mark ability as used
+      await new Promise((resolve, reject) => {
+        gameService.db.query(
+          'UPDATE player_scores SET ability_used = TRUE WHERE id = ?',
+          [player.id],
+          (err) => err ? reject(err) : resolve()
+        );
+      });
+      
+      socket.emit("hackerAbilityActivated", {
+        message: "Hacker ability activated! Auto-defuse ready."
+      });
+      
+    } catch (err) {
+      console.error("Error using Hacker ability:", err);
+      socket.emit("gameError", { message: "Failed to use Hacker ability" });
+    }
   });
 });
 

@@ -3,12 +3,16 @@ import QRCode from "react-qr-code";
 import { Link } from "react-router-dom";
 
 const QRLogin: React.FC = () => {
-  // Use current URL origin (works with ngrok, localhost, or local IP)
-  const qrValue = `${window.location.origin}/login`;
-  
-  // Check if using ngrok
-  const isNgrok = window.location.hostname.includes('ngrok');
+  // Prefer explicit LAN IP (for mobile scanning) if provided via env
+  const lanIp = import.meta.env.VITE_LOCAL_LAN_IP as string | undefined;
   const isLocalhost = window.location.hostname === 'localhost';
+  const computedOrigin = (() => {
+    if (lanIp && /^\d+\.\d+\.\d+\.\d+$/.test(lanIp)) {
+      return `http://${lanIp}:5173`;
+    }
+    return window.location.origin;
+  })();
+  const qrValue = `${computedOrigin}/login`;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#060606] overflow-hidden relative font-sans">
@@ -32,21 +36,28 @@ const QRLogin: React.FC = () => {
           <QRCode value={qrValue} size={220} level="M" />
         </div>
 
-        {isNgrok && (
-          <div className="mt-4 p-2 bg-green-600/20 border border-green-600/50 rounded-lg">
-            <p className="text-green-400 text-xs font-semibold">
-              ✅ Using ngrok HTTPS - Camera will work on mobile!
+
+        {isLocalhost && !lanIp && (
+          <div className="mt-4 p-2 bg-orange-600/20 border border-orange-600/50 rounded-lg">
+            <p className="text-orange-400 text-xs font-semibold">
+              ⚠️ QR currently points to localhost.
+            </p>
+            <p className="text-gray-400 text-xs mt-1">
+              Set VITE_LOCAL_LAN_IP in client/.env to force LAN IP for mobile.
+            </p>
+            <p className="text-yellow-300 text-xs mt-1">
+              Example: VITE_LOCAL_LAN_IP=10.141.187.24
             </p>
           </div>
         )}
 
-        {isLocalhost && (
-          <div className="mt-4 p-2 bg-orange-600/20 border border-orange-600/50 rounded-lg">
-            <p className="text-orange-400 text-xs font-semibold">
-              ⚠️ Using localhost - Won't work on other devices
+        {lanIp && isLocalhost && (
+          <div className="mt-4 p-2 bg-green-600/20 border border-green-600/50 rounded-lg">
+            <p className="text-green-400 text-xs font-semibold">
+              ✅ Forced LAN IP mode: {lanIp}
             </p>
             <p className="text-gray-400 text-xs mt-1">
-              Use ngrok for mobile access
+              QR uses http://{lanIp}:5173/login for mobile devices.
             </p>
           </div>
         )}

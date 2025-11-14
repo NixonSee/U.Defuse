@@ -1,21 +1,36 @@
 import axios from 'axios';
 
-// Dynamic API base URL - supports ngrok or local network
+// Determine API base URL based on environment 
 const getApiBaseUrl = () => {
-  // Use environment variable if set (for ngrok)
+  // Explicit override via env (e.g. Render/Railway backend URL)
   if (import.meta.env.VITE_API_URL) {
-    return `${import.meta.env.VITE_API_URL}/api`;
+    return `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`;
   }
-  
-  // Otherwise use dynamic local network URL
+
   const hostname = window.location.hostname;
-  const port = '5000';
-  return `http://${hostname}:${port}/api`;
+
+  // Development / local network: use explicit port 5000
+  const isLocal = (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname)
+  );
+  if (isLocal) {
+    return `http://${hostname}:5000/api`;
+  }
+
+  // Production: backend expected at same origin under /api
+  return '/api';
 };
 
 // Create axios instance with base configuration
+const apiBaseUrl = getApiBaseUrl();
+console.log('🌐 API Base URL:', apiBaseUrl);
+console.log('🌐 Current hostname:', window.location.hostname);
+
 const api = axios.create({
-  baseURL: getApiBaseUrl(),  // Use the dynamic function
+  baseURL: apiBaseUrl,
   timeout: 10000,
   withCredentials: true,
   headers: {

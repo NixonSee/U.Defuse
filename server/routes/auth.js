@@ -20,6 +20,15 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// DEBUG: Test endpoint that doesn't require database
+router.get("/ping", (req, res) => {
+  res.json({ 
+    message: "Server is reachable!",
+    requestOrigin: req.headers.origin || 'No origin header',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // REGISTER
 router.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
@@ -130,12 +139,19 @@ router.post("/login", async (req, res) => {
         });
 
         // Set JWT as HTTP-only cookie
-        res.cookie('auth_token', token, {
+        // Use 'none' only for production HTTPS cross-origin; 'lax' for local (including local network)
+        const isProd = process.env.NODE_ENV === 'production';
+        
+        // For local network access, don't set domain so cookie works on IP addresses
+        const cookieOptions = {
           httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 24 * 60 * 60 * 1000 // 24 hours
-        });
+          secure: isProd,
+          sameSite: 'lax', // Always 'lax' for local dev (works on mobile too)
+          maxAge: 24 * 60 * 60 * 1000, // 24 hours
+          path: '/'
+        };
+        
+        res.cookie('auth_token', token, cookieOptions);
 
         res.json({ 
           message: "Login successful",
@@ -188,10 +204,12 @@ router.get("/profile", authenticateToken, (req, res) => {
 // LOGOUT - Clear the HTTP-only cookie
 router.post("/logout", (req, res) => {
   // Clear the auth cookie
+  const isProd = process.env.NODE_ENV === 'production';
   res.clearCookie('auth_token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/'
   });
   
   res.json({ message: "Logged out successfully" });

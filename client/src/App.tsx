@@ -9,6 +9,8 @@ import History from "./pages/History";
 import Settings from "./pages/Settings";
 import StartGame from "./pages/StartGame";
 import JoinGame from "./pages/JoinGame";
+import GameDashboard from "./pages/GameDashboard";
+import BombQuiz from "./pages/BombQuiz";
 
 const App: React.FC = () => {
   return (
@@ -23,6 +25,8 @@ const App: React.FC = () => {
       <Route path="/Settings" element={<Settings />} />
       <Route path="/StartGame" element={<StartGame />} />
       <Route path="/JoinGame" element={<JoinGame />} />
+      <Route path="/game-dashboard" element={<GameDashboard />} />
+      <Route path="/bomb-quiz/:gameSessionId" element={<BombQuiz />} />
     </Routes>
   );
 };

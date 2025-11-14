@@ -7,8 +7,24 @@ class SocketService {
   async connect(): Promise<Socket> {
     return new Promise((resolve, reject) => {
       try {
-        // Use environment variable if set (for ngrok), otherwise use dynamic local network URL
-        const socketUrl = import.meta.env.VITE_SOCKET_URL || `http://${window.location.hostname}:5000`;
+        // Resolve Socket.IO server URL
+        const resolveSocketUrl = () => {
+          // Explicit override (e.g., Render/Railway backend)
+          if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
+
+          const hostname = window.location.hostname;
+          const isLocal = (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            /^10\./.test(hostname) ||
+            /^192\.168\./.test(hostname)
+          );
+          if (isLocal) return `http://${hostname}:5000`;
+
+          // Production default: same origin (avoids mixed-content/CSP issues)
+          return window.location.origin;
+        };
+        const socketUrl = resolveSocketUrl();
         console.log('🔌 Creating Socket.IO connection to:', socketUrl);
         
         // Create socket connection - cookies will be sent automatically
@@ -177,3 +193,14 @@ class SocketService {
 // Export a singleton instance
 export const socketService = new SocketService();
 export default socketService;
+
+// Export socket getter for components (ensures socket is ready)
+export const getSocket = () => socketService.getSocket();
+
+// For backward compatibility, export socket proxy
+export const socket = {
+  emit: (event: string, ...args: any[]) => socketService.getSocket()?.emit(event, ...args),
+  on: (event: string, callback: (...args: any[]) => void) => socketService.getSocket()?.on(event, callback),
+  off: (event: string, callback?: (...args: any[]) => void) => socketService.getSocket()?.off(event, callback),
+  once: (event: string, callback: (...args: any[]) => void) => socketService.getSocket()?.once(event, callback),
+};
