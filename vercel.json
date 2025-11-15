@@ -8,7 +8,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/client/dist/$1" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "env": { "NODE_ENV": "production" }
 }
