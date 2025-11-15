@@ -1,37 +1,63 @@
--- Sample Python Control Flow Quiz Questions
-
-INSERT INTO quiz_questions (question, code_snippet, option_a, option_b, option_c, option_d, correct_answer, difficulty, topic) VALUES
--- Easy Questions
-('What will this code print?', 'x = 5\nif x > 3:\n    print("A")\nelse:\n    print("B")', 'A', 'B', 'Error', 'Nothing', 'A', 'easy', 'if-else'),
-('What is the output?', 'for i in range(3):\n    print(i)', '0 1 2', '1 2 3', '0 1 2 3', 'Error', 'A', 'easy', 'loops'),
-('What does this return?', 'x = 10\ny = 20\nresult = x if x > y else y\nprint(result)', '10', '20', 'True', 'False', 'B', 'easy', 'if-else'),
-
--- Medium Questions
-('What will be printed?', 'x = 0\nwhile x < 3:\n    x += 1\n    if x == 2:\n        continue\n    print(x)', '1 3', '0 1 2', '1 2 3', '0 1 3', 'A', 'medium', 'loops'),
-('What is the output?', 'def check(n):\n    return "Even" if n % 2 == 0 else "Odd"\nprint(check(7))', 'Even', 'Odd', 'Error', 'None', 'B', 'medium', 'functions'),
-('What gets printed?', 'x = [1, 2, 3]\nfor i in x:\n    if i == 2:\n        break\n    print(i)', '1', '1 2', '1 2 3', 'Nothing', 'A', 'medium', 'loops'),
-
--- Hard Questions  
-('What is the final value of count?', 'count = 0\nfor i in range(5):\n    for j in range(3):\n        if i == j:\n            count += 1\nprint(count)', '3', '5', '15', '0', 'A', 'hard', 'loops'),
-('What will this print?', 'def func(x=[]):\n    x.append(1)\n    return x\nprint(len(func()))\nprint(len(func()))', '1 1', '1 2', '2 2', 'Error', 'B', 'hard', 'functions'),
-('What is the output?', 'x = 5\ny = 10\nif x > 3 and y < 15:\n    print("A")\nelif x > 3 or y > 15:\n    print("B")\nelse:\n    print("C")', 'A', 'B', 'C', 'Error', 'A', 'hard', 'if-else'),
-
--- More Medium
-('What gets printed?', 'for i in range(1, 4):\n    if i % 2 == 0:\n        print(i)', '2', '1 3', '1 2 3', '2 4', 'A', 'medium', 'loops'),
-('What is the result?', 'x = [1, 2, 3, 4, 5]\nresult = sum([i for i in x if i % 2 == 0])\nprint(result)', '6', '9', '15', '5', 'A', 'medium', 'loops'),
-('What will be printed?', 'x = True\ny = False\nif x and not y:\n    print("A")\nelif not x and y:\n    print("B")\nelse:\n    print("C")', 'A', 'B', 'C', 'Error', 'A', 'medium', 'if-else'),
-
--- More Easy
-('What is printed?', 'x = 3\nif x == 3:\n    print("Yes")\nelse:\n    print("No")', 'Yes', 'No', 'Error', 'Nothing', 'A', 'easy', 'if-else'),
-('What is the output?', 'count = 0\nfor i in range(5):\n    count += 1\nprint(count)', '4', '5', '6', 'Error', 'B', 'easy', 'loops'),
-('What gets printed?', 'x = 10\nwhile x > 7:\n    print(x)\n    x -= 1', '10 9 8', '10 9 8 7', '9 8 7', 'Infinite loop', 'A', 'easy', 'loops'),
-
--- More Hard
-('What is the output?', 'def mystery(n):\n    if n <= 1:\n        return n\n    return mystery(n-1) + mystery(n-2)\nprint(mystery(5))', '3', '5', '8', '13', 'B', 'hard', 'functions'),
-('What gets printed?', 'x = [1, 2, 3]\ny = x\ny.append(4)\nprint(len(x))', '3', '4', 'Error', 'None', 'B', 'hard', 'lists'),
-('What is the result?', 'result = ""\nfor i in range(3):\n    for j in range(2):\n        result += str(i)\nprint(result)', '001122', '012012', '000111222', '012345', 'A', 'hard', 'loops'),
-
--- Additional Variety
-('What will print?', 'x = [1, 2, 3, 4]\nprint(x[1:3])', '[1, 2]', '[2, 3]', '[1, 2, 3]', '[2, 3, 4]', 'B', 'medium', 'lists'),
-('What is the output?', 'def test(a, b=5):\n    return a + b\nprint(test(10))', '5', '10', '15', 'Error', 'C', 'medium', 'functions'),
-('What gets printed?', 'x = {"a": 1, "b": 2}\nprint("a" in x)', 'True', 'False', '1', 'Error', 'A', 'medium', 'dictionaries');
+INSERT INTO quiz_questions 
+(question, code_snippet, option_a, option_b, option_c, option_d, correct_answer, difficulty, topic)
+VALUES
+-- 1
+('What will this print?', 'x = 10\nif x > 5:\n    print("Hi")', 'Hi', 'Nothing', 'Error', '5', 'A', 'easy', 'control-flow'),
+-- 2
+('What is the output?', 'x = 3\nif x == 3:\n    print("Yes")\nelse:\n    print("No")', 'Yes', 'No', '3', 'Error', 'A', 'easy', 'control-flow'),
+-- 3
+('What gets printed?', 'x = 1\nif x:\n    print("True")', 'True', 'False', '1', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 4
+('What will the loop print?', 'for i in range(3):\n    print(i)', '0 1 2', '1 2 3', '0 1 2 3', 'Error', 'A', 'easy', 'control-flow'),
+-- 5
+('What happens here?', 'x = 0\nwhile x < 2:\n    print(x)\n    x += 1', '0 1', '1 2', '0 1 2', 'Infinite loop', 'A', 'easy', 'control-flow'),
+-- 6
+('What prints?', 'x = 5\nif x > 10:\n    print("A")\nelse:\n    print("B")', 'A', 'B', '5', 'Error', 'B', 'easy', 'control-flow'),
+-- 7
+('What is printed?', 'for i in range(2):\n    print("Hello")', 'Hello Hello', 'Hello', '2', 'Error', 'A', 'easy', 'control-flow'),
+-- 8
+('What is the output?', 'x = 4\nif x % 2 == 0:\n    print("Even")', 'Even', 'Odd', '4', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 9
+('What does this print?', 'x = 3\ny = 5\nif x < y:\n    print("Small")', 'Small', 'Big', 'Equal', 'Error', 'A', 'easy', 'control-flow'),
+-- 10
+('What will print?', 'for i in range(3):\n    if i == 1:\n        print("Middle")', 'Middle', '1', 'Middle Middle', 'Error', 'A', 'easy', 'control-flow'),
+-- 11
+('What happens?', 'x = 2\nif x > 1:\n    print("A")\nprint("B")', 'A B', 'A', 'B', 'Error', 'A', 'easy', 'control-flow'),
+-- 12
+('What is printed?', 'x = 0\nwhile x < 1:\n    print("Loop")\n    x += 1', 'Loop', 'Loop Loop', 'Nothing', 'Error', 'A', 'easy', 'control-flow'),
+-- 13
+('What is the output?', 'for i in range(2):\n    print(i * 2)', '0 2', '2 4', '0 1', 'Error', 'A', 'easy', 'control-flow'),
+-- 14
+('What gets printed?', 'x = 7\nif x != 7:\n    print("A")\nelse:\n    print("B")', 'A', 'B', '7', 'Nothing', 'B', 'easy', 'control-flow'),
+-- 15
+('What is printed?', 'x = 1\nif x > 0:\n    print("Positive")', 'Positive', 'Negative', '0', 'Error', 'A', 'easy', 'control-flow'),
+-- 16
+('What will print?', 'for i in range(1):\n    print("One")', 'One', 'One One', 'Nothing', 'Error', 'A', 'easy', 'control-flow'),
+-- 17
+('What happens here?', 'x = True\nif x:\n    print("OK")', 'OK', 'True', 'False', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 18
+('What is printed?', 'x = 5\nif x < 2:\n    print("Low")\nelse:\n    print("High")', 'Low', 'High', '5', 'Error', 'B', 'easy', 'control-flow'),
+-- 19
+('What is the output?', 'for i in range(4):\n    if i == 3:\n        print("Done")', 'Done', '3', 'Done Done', 'Error', 'A', 'easy', 'control-flow'),
+-- 20
+('What gets printed?', 'x = 2\ny = 4\nif x < y and y > 3:\n    print("OK")', 'OK', '2', '4', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 21
+('What prints?', 'for i in range(2):\n    continue\nprint("End")', 'End', '2', 'Nothing', 'Error', 'A', 'easy', 'control-flow'),
+-- 22
+('What is printed?', 'x = 3\nif x > 1:\n    print("A")\nelif x > 2:\n    print("B")', 'A', 'B', 'A B', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 23
+('What happens?', 'x = 0\nif not x:\n    print("Zero")', 'Zero', '0', 'False', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 24
+('What prints?', 'for i in range(3):\n    if i == 0:\n        print("Start")', 'Start', 'Start Start', '0', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 25
+('What is the output?', 'x = 9\nif x % 3 == 0:\n    print("Divisible")', 'Divisible', '9', '3', 'Error', 'A', 'easy', 'control-flow'),
+-- 26
+('What will print?', 'i = 0\nwhile i < 3:\n    print(i)\n    break', '0', '0 1 2', 'Nothing', 'Error', 'A', 'easy', 'control-flow'),
+-- 27
+('What gets printed?', 'x = 4\ny = 4\nif x == y:\n    print("Equal")', 'Equal', '4', 'True', 'Nothing', 'A', 'easy', 'control-flow'),
+-- 28
+('What is the output?', 'for i in range(3):\n    pass\nprint("Done")', 'Done', '3', 'Nothing', 'Error', 'A', 'easy', 'control-flow'),
+-- 29
+('What prints?', 'x = True\ny = False\nif x and not y:\n    print("Yes")', 'Yes', 'No', 'True', 'False', 'A', 'easy', 'control-flow'),
+-- 30
+('What will print?', 'x = "test"\nif x:\n    print("Not Empty")', 'Not Empty', 'Empty', 'test', 'Error', 'A', 'easy', 'control-flow');

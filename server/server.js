@@ -6,7 +6,9 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import authRoutes from "./routes/auth.js";
+import gameRoutes from "./routes/game.js";
 import gameService from "./services/gameService.js";
+import db from "./db.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -81,6 +83,7 @@ app.use(express.json());
 
 // API routes
 app.use("/api/auth", authRoutes);
+app.use("/api/game", gameRoutes);
 
 // Store connected players
 const connectedPlayers = new Map();
@@ -112,11 +115,17 @@ setInterval(cleanupConnections, 30000);
 // Socket.IO authentication middleware
 io.use(async (socket, next) => {
   try {
+    console.log('🔐 Socket.IO auth middleware triggered');
+    console.log('📋 Handshake headers:', socket.handshake.headers);
+    
     // Get cookies from handshake headers
     const cookies = socket.handshake.headers.cookie;
     
+    console.log('🍪 Raw cookies:', cookies);
+    
     if (!cookies) {
-      return next(new Error("Authentication error"));
+      console.error('❌ No cookies found in handshake');
+      return next(new Error("Authentication error: No cookies"));
     }
 
     // Parse cookies manually to get auth_token
@@ -126,23 +135,32 @@ io.use(async (socket, next) => {
       cookieObj[key] = value;
     });
 
+    console.log('🍪 Parsed cookies:', Object.keys(cookieObj));
+
     const token = cookieObj.auth_token;
     
     if (!token) {
-      return next(new Error("Authentication error"));
+      console.error('❌ No auth_token found in cookies');
+      return next(new Error("Authentication error: No auth token"));
     }
+
+    console.log('🎟️ Token found, verifying...');
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    console.log('✅ Token decoded:', { id: decoded.id, username: decoded.username });
     
     // Since we include user data in JWT, we can use it directly
     socket.userId = decoded.id;
     socket.username = decoded.username;
     socket.email = decoded.email;
+    
+    console.log('✅ Socket authenticated:', { userId: socket.userId, username: socket.username });
     next();
   } catch (err) {
-    console.error("Socket authentication error:", err);
-    next(new Error("Authentication error"));
+    console.error("❌ Socket authentication error:", err.message);
+    next(new Error("Authentication error: " + err.message));
   }
 });
 
@@ -233,6 +251,23 @@ io.on("connection", (socket) => {
       const room = gameRooms.get(roomCode);
       const leavingPlayer = room.players.find(p => p.socketId === socket.id);
       
+      // If game session exists, mark player as disconnected (allow reconnection)
+      if (room.gameSessionId && leavingPlayer) {
+        leavingPlayer.disconnected = true;
+        console.log(`🔌 Marked ${socket.username} as disconnected in room ${roomCode}`);
+        
+        // Notify remaining players that this player disconnected
+        io.to(roomCode).emit("playerDisconnected", {
+          playerId: leavingPlayer.id,
+          username: leavingPlayer.username
+        });
+        
+        // Don't end the game, preserve room for reconnection
+        console.log(`🎮 Preserving room ${roomCode} for ${socket.username} to reconnect`);
+        return;
+      }
+      
+      // Game hasn't started yet, proceed with normal disconnect handling
       // Remove player from room
       room.players = room.players.filter(p => p.socketId !== socket.id);
       
@@ -279,6 +314,12 @@ io.on("connection", (socket) => {
   socket.on("createRoom", (data) => {
     const { roomCode } = data;
     console.log(`🏠 ${socket.username} (ID: ${socket.userId}) creating room: ${roomCode}`);
+    console.log('🔍 Debug - Socket context:', {
+      userId: socket.userId,
+      username: socket.username,
+      socketId: socket.id,
+      hasUserId: !!socket.userId
+    });
     
     // If room already exists and user is already the host, just send current state
     if (gameRooms.has(roomCode)) {
@@ -306,6 +347,8 @@ io.on("connection", (socket) => {
       isReady: true,
       isHost: true
     };
+    
+    console.log('✅ Creating host player:', hostPlayer);
     
     gameRooms.set(roomCode, {
       roomCode,
@@ -338,7 +381,7 @@ io.on("connection", (socket) => {
     
     // Check if room exists
     if (!gameRooms.has(roomCode)) {
-      socket.emit("roomError", { message: "Room not found" });
+      socket.emit("roomError", { message: "Room does not exist" });
       console.log(`❌ Room ${roomCode} not found`);
       return;
     }
@@ -347,7 +390,7 @@ io.on("connection", (socket) => {
     
     // Check if room is full (max 4 players)
     if (room.players.length > 4) {
-      socket.emit("roomError", { message: "Room is full" });
+      socket.emit("roomError", { message: "This room is full. Please try another room." });
       console.log(`❌ Room ${roomCode} is full`);
       return;
     }
@@ -401,6 +444,99 @@ io.on("connection", (socket) => {
     });
   });
 
+  // Handle rejoin room (for game navigation)
+  socket.on("rejoinRoom", (data) => {
+    const { roomCode } = data;
+    console.log(`🔄 ${socket.username} (ID: ${socket.userId}) rejoining room: ${roomCode}`);
+    
+    if (!gameRooms.has(roomCode)) {
+      console.log(`❌ Room ${roomCode} not found for rejoin`);
+      socket.emit("roomError", { message: "Room does not exist" });
+      return;
+    }
+    
+    const room = gameRooms.get(roomCode);
+    
+    // Update the player's socket ID if they're already in the room
+    const existingPlayer = room.players.find(p => p.id === socket.userId);
+    if (existingPlayer) {
+      console.log(`🔄 Updating socket ID for ${socket.username} in room ${roomCode}`);
+      existingPlayer.socketId = socket.id;
+      
+      // Mark player as reconnected
+      if (existingPlayer.disconnected) {
+        existingPlayer.disconnected = false;
+        console.log(`✅ ${socket.username} reconnected to active game`);
+        
+        // Notify other players about reconnection
+        io.to(roomCode).emit("playerReconnected", {
+          playerId: existingPlayer.id,
+          username: socket.username
+        });
+      }
+    }
+    
+    // Rejoin the Socket.IO room
+    socket.join(roomCode);
+    socket.roomCode = roomCode;
+    
+    console.log(`✅ ${socket.username} rejoined room ${roomCode}`);
+    console.log(`🚪 Socket ${socket.id} rejoined Socket.IO room ${roomCode}`);
+    
+    // If game session exists, mark game as active (players have navigated to game)
+    if (room.gameSessionId) {
+      room.gameActive = true;
+      console.log(`🎮 Game is now active in room ${roomCode}`);
+      
+      gameService.getGameState(room.gameSessionId).then(gameState => {
+        // Check if room still exists (might have been deleted while fetching)
+        if (!gameRooms.has(roomCode)) {
+          console.log(`⚠️ Room ${roomCode} was deleted while fetching game state, skipping sync`);
+          return;
+        }
+        
+        // Check if only one player remains (game ended)
+        const activePlayers = gameState.players.filter(p => !p.is_eliminated);
+        if (activePlayers.length === 1) {
+          const winner = activePlayers[0];
+          console.log(`🏆 Game has ended! Winner: ${winner.username}`);
+          
+          // Send game ended event to rejoining player
+          io.to(roomCode).emit("gameEnded", {
+            winner: {
+              id: winner.user_id,
+              username: winner.username,
+              score: winner.score
+            },
+            reason: 'last_player_standing',
+            finalScores: cleanPlayerData(gameState.players)
+          });
+          return; // Don't send regular game state sync
+        }
+        
+        const syncData = {
+          gameSessionId: room.gameSessionId,
+          roomCode: roomCode,
+          players: cleanPlayerData(gameState.players),
+          currentTurn: room.currentTurn,
+          status: 'in_progress'
+        };
+        
+        console.log(`🔄 Syncing game state to all players in room ${roomCode}`);
+        console.log(`🔄 Current turn: ${room.currentTurn}`);
+        console.log(`🔄 Players:`, gameState.players.map(p => ({ username: p.username, score: p.score })));
+        
+        // Send to ALL players in the room to ensure everyone is in sync
+        io.to(roomCode).emit("gameStateSync", syncData);
+        
+        // Also send directly to the rejoining player to be sure
+        socket.emit("gameStateSync", syncData);
+      }).catch(err => {
+        console.error("Error syncing game state on rejoin:", err);
+      });
+    }
+  });
+
   // Handle player ready status
   socket.on("toggleReady", (data) => {
     const roomCode = socket.roomCode;
@@ -433,6 +569,25 @@ io.on("connection", (socket) => {
     const room = gameRooms.get(roomCode);
     const leavingPlayer = room.players.find(p => p.socketId === socket.id);
     
+    // If game session exists, mark player as disconnected (allow reconnection)
+    if (room.gameSessionId && leavingPlayer) {
+      leavingPlayer.disconnected = true;
+      console.log(`🔌 Marked ${socket.username} as disconnected in room ${roomCode}`);
+      
+      // Notify remaining players that this player disconnected
+      io.to(roomCode).emit("playerDisconnected", {
+        playerId: leavingPlayer.id,
+        username: leavingPlayer.username
+      });
+      
+      // Don't end the game, preserve room for reconnection
+      console.log(`🎮 Preserving room ${roomCode} for ${socket.username} to reconnect`);
+      socket.leave(roomCode);
+      delete socket.roomCode;
+      return;
+    }
+    
+    // Game hasn't started - proceed with normal leave handling
     // Filter by socket ID, not user ID
     room.players = room.players.filter(p => p.socketId !== socket.id);
     
@@ -466,7 +621,7 @@ io.on("connection", (socket) => {
     
     // Check if player is host
     if (room.host.id !== socket.userId) {
-      socket.emit("gameError", { message: "Only host can start the game" });
+      socket.emit("gameError", { message: "Only the room host can start the game" });
       return;
     }
     
@@ -488,6 +643,7 @@ io.on("connection", (socket) => {
       // Store gameSessionId in room
       room.gameSessionId = gameSessionId;
       room.currentTurn = 0;
+      room.gameActive = false; // Not active yet - players are still navigating
       
       console.log(`✅ Game session ${gameSessionId} created for room ${roomCode}`);
       
@@ -511,7 +667,7 @@ io.on("connection", (socket) => {
       
     } catch (err) {
       console.error("Error starting game:", err);
-      socket.emit("gameError", { message: "Failed to start game" });
+      socket.emit("gameError", { message: "Unable to start game. Please try again." });
     }
   });
 
@@ -524,25 +680,25 @@ io.on("connection", (socket) => {
       
       console.log(`💣 ${socket.username} scanned bomb! Timer: ${result.timerSeconds}s`);
       
-      // Send quiz to player
+      // Send quiz to player (with their specific timer including bonuses)
       socket.emit("bombQuiz", {
         question: result.question,
         timerSeconds: result.timerSeconds,
         bonusTime: result.bonusTime
       });
       
-      // Notify room that player triggered bomb
+      // Notify room that player triggered bomb (use base timer for other players)
       if (socket.roomCode) {
         io.to(socket.roomCode).emit("playerTriggeredBomb", {
           playerId: socket.userId,
           username: socket.username,
-          timerSeconds: result.timerSeconds
+          timerSeconds: 30 // Base timer for spectators, not affected by timekeeper role
         });
       }
       
     } catch (err) {
       console.error("Error triggering bomb:", err);
-      socket.emit("gameError", { message: "Failed to trigger bomb" });
+      socket.emit("gameError", { message: "Unable to trigger bomb. Please try again." });
     }
   });
 
@@ -551,6 +707,22 @@ io.on("connection", (socket) => {
     const { gameSessionId, questionId, answer, timeTaken, usedHackerAbility } = data;
     
     try {
+      // If claiming to use hacker ability, validate it
+      if (usedHackerAbility) {
+        const gameState = await gameService.getGameState(gameSessionId);
+        const player = gameState.players.find(p => p.user_id === socket.userId);
+        
+        if (!player || player.role !== 'hacker') {
+          socket.emit("gameError", { message: "This ability is only available to the Hacker" });
+          return;
+        }
+        
+        if (player.hacker_ability_used) {
+          socket.emit("gameError", { message: "You've already used your Hacker ability" });
+          return;
+        }
+      }
+      
       const result = await gameService.defuseBomb(
         gameSessionId,
         socket.userId,
@@ -561,15 +733,28 @@ io.on("connection", (socket) => {
       );
       
       console.log(`${result.success ? '✅' : '❌'} ${socket.username} ${result.success ? 'defused' : 'failed'} bomb!`);
+      console.log('Sending quizResult:', result);
       
-      // Send result to player
-      socket.emit("quizResult", result);
+      // ALWAYS send result to player first
+      socket.emit("quizResult", {
+        success: result.success,
+        scoreGained: result.scoreGained || 0,
+        correctAnswer: result.correctAnswer,
+        timeTaken: timeTaken || 0,
+        method: usedHackerAbility ? 'hacker' : 'quiz'
+      });
+      
+      // If wrong answer, eliminate player
+      if (!result.success) {
+        await gameService.eliminatePlayer(socket.userId, gameSessionId);
+        console.log(`💀 ${socket.username} eliminated due to wrong answer!`);
+      }
       
       // Update room with score
       if (socket.roomCode) {
         const gameState = await gameService.getGameState(gameSessionId);
         io.to(socket.roomCode).emit("scoreUpdate", {
-          players: gameState.players
+          players: cleanPlayerData(gameState.players)
         });
         
         if (result.success) {
@@ -579,12 +764,68 @@ io.on("connection", (socket) => {
             scoreGained: result.scoreGained,
             method: result.method || 'quiz'
           });
+        } else {
+          // Notify elimination
+          io.to(socket.roomCode).emit("playerEliminatedEvent", {
+            playerId: socket.userId,
+            username: socket.username,
+            players: cleanPlayerData(gameState.players)
+          });
+          
+          // Check if only one player remains (others eliminated)
+          const activePlayers = gameState.players.filter(p => !p.is_eliminated);
+          if (activePlayers.length === 1) {
+            // Immediately show winner
+            const winner = activePlayers[0];
+            console.log(`🏆 Only one player remaining! Winner: ${winner.username}`);
+            
+            // Mark game as completed in database
+            await gameService.completeGame(gameSessionId, winner.user_id);
+            
+            io.to(socket.roomCode).emit("gameEnded", {
+              winner: {
+                id: winner.user_id,
+                username: winner.username,
+                score: winner.score
+              },
+              reason: 'last_player_standing',
+              finalScores: cleanPlayerData(gameState.players)
+            });
+          } else {
+            // Check if game ended by other means
+            const endCheck = await gameService.checkGameEnd(gameSessionId);
+            if (endCheck.ended) {
+              const winner = gameState.players.find(p => !p.is_eliminated) || 
+                            gameState.players.reduce((max, p) => p.score > max.score ? p : max);
+              
+              // Mark game as completed in database
+              await gameService.completeGame(gameSessionId, winner.user_id);
+              
+              io.to(socket.roomCode).emit("gameEnded", {
+                winner: {
+                  id: winner.user_id,
+                  username: winner.username,
+                  score: winner.score
+                },
+                reason: endCheck.reason,
+                finalScores: cleanPlayerData(gameState.players)
+              });
+            }
+          }
         }
       }
       
     } catch (err) {
       console.error("Error answering quiz:", err);
-      socket.emit("gameError", { message: "Failed to submit answer" });
+      // Still send a result so UI isn't stuck
+      socket.emit("quizResult", {
+        success: false,
+        scoreGained: 0,
+        correctAnswer: 'Unknown',
+        timeTaken: timeTaken || 0,
+        method: 'quiz'
+      });
+      socket.emit("gameError", { message: "Unable to submit answer. Please try again." });
     }
   });
 
@@ -606,7 +847,7 @@ io.on("connection", (socket) => {
       if (socket.roomCode) {
         const gameState = await gameService.getGameState(gameSessionId);
         io.to(socket.roomCode).emit("scoreUpdate", {
-          players: gameState.players
+          players: cleanPlayerData(gameState.players)
         });
         
         io.to(socket.roomCode).emit("bombDefused", {
@@ -641,7 +882,7 @@ io.on("connection", (socket) => {
         io.to(socket.roomCode).emit("playerEliminatedEvent", {
           playerId: socket.userId,
           username: socket.username,
-          players: gameState.players
+          players: cleanPlayerData(gameState.players)
         });
         
         if (endCheck.ended) {
@@ -655,7 +896,7 @@ io.on("connection", (socket) => {
               score: winner.score
             },
             reason: endCheck.reason,
-            finalScores: gameState.players
+            finalScores: cleanPlayerData(gameState.players)
           });
         }
       }
@@ -679,18 +920,18 @@ io.on("connection", (socket) => {
         return;
       }
       
-      if (player.ability_used) {
+      if (player.hacker_ability_used) {
         socket.emit("gameError", { message: "Hacker ability already used" });
         return;
       }
       
       console.log(`🔓 ${socket.username} used Hacker ability!`);
       
-      // Mark ability as used
+      // Mark ability as used in database
       await new Promise((resolve, reject) => {
-        gameService.db.query(
-          'UPDATE player_scores SET ability_used = TRUE WHERE id = ?',
-          [player.id],
+        db.query(
+          'UPDATE player_scores SET hacker_ability_used = TRUE WHERE user_id = ? AND game_round_id = ?',
+          [socket.userId, gameState.gameRoundId],
           (err) => err ? reject(err) : resolve()
         );
       });
@@ -701,16 +942,119 @@ io.on("connection", (socket) => {
       
     } catch (err) {
       console.error("Error using Hacker ability:", err);
-      socket.emit("gameError", { message: "Failed to use Hacker ability" });
+      socket.emit("gameError", { message: "Unable to use Hacker ability. Please try again." });
     }
   });
+
+  // Handle pass turn
+  socket.on("passTurn", async (data) => {
+    console.log('🔵 SERVER: passTurn event received from', socket.username, 'data:', data);
+    const { gameSessionId } = data;
+    const roomCode = socket.roomCode;
+    
+    console.log('🔵 SERVER: roomCode:', roomCode, 'has room:', gameRooms.has(roomCode));
+    
+    if (!roomCode || !gameRooms.has(roomCode)) {
+      console.log('❌ SERVER: Room not found for', roomCode);
+      socket.emit("gameError", { message: "Room not found" });
+      return;
+    }
+    
+    try {
+      const room = gameRooms.get(roomCode);
+      const gameState = await gameService.getGameState(gameSessionId);
+      
+      // Award 5 points for passing turn
+      const currentPlayer = gameState.players.find(p => p.user_id === socket.userId);
+      if (currentPlayer) {
+        await new Promise((resolve, reject) => {
+          db.query(
+            'UPDATE player_scores SET score = score + 5 WHERE id = ?',
+            [currentPlayer.id],
+            (err) => err ? reject(err) : resolve(true)
+          );
+        });
+        console.log(`⭐ ${socket.username} earned 5 points for passing turn`);
+        
+        // Emit score update immediately
+        const updatedGameState = await gameService.getGameState(gameSessionId);
+        io.to(roomCode).emit("scoreUpdate", {
+          players: cleanPlayerData(updatedGameState.players)
+        });
+      }
+      
+      // Get current turn index from full players array
+      const currentTurnIndex = room.currentTurn !== undefined ? room.currentTurn : 0;
+      
+      // Find next non-eliminated and non-disconnected player
+      let nextTurnIndex = (currentTurnIndex + 1) % gameState.players.length;
+      let attempts = 0;
+      
+      // Skip eliminated or disconnected players
+      while (attempts < gameState.players.length) {
+        const nextPlayer = gameState.players[nextTurnIndex];
+        const roomPlayer = room.players.find(p => p.id === nextPlayer.user_id);
+        
+        if (!nextPlayer.is_eliminated && !roomPlayer?.disconnected) {
+          break;
+        }
+        
+        nextTurnIndex = (nextTurnIndex + 1) % gameState.players.length;
+        attempts++;
+      }
+      
+      // Update room's current turn
+      room.currentTurn = nextTurnIndex;
+      
+      console.log(`⏭️ ${socket.username} passed turn. Current turn index: ${currentTurnIndex} -> ${nextTurnIndex}`);
+      console.log(`   Next player: ${gameState.players[nextTurnIndex].username}`);
+      
+      // Notify all players in the room
+      console.log('🟢 SERVER: Emitting turnChanged to room', roomCode);
+      console.log('🟢 SERVER: Room members:', Array.from(io.sockets.adapter.rooms.get(roomCode) || []));
+      console.log('🟢 SERVER: Turn data - currentTurn:', nextTurnIndex, 'nextPlayer:', gameState.players[nextTurnIndex]?.username);
+      
+      io.to(roomCode).emit("turnChanged", {
+        currentTurn: nextTurnIndex,
+        nextPlayer: gameState.players[nextTurnIndex]
+      });
+      console.log('🟢 SERVER: turnChanged emitted successfully');
+      
+    } catch (err) {
+      console.error("Error passing turn:", err);
+      socket.emit("gameError", { message: "Unable to pass turn. Please try again." });
+    }
+  });
+
 });
 
 const PORT = process.env.PORT || 5000;
 const HOST = "0.0.0.0";
 
-httpServer.listen(PORT, HOST, () => {
-  console.log(`✅ Server running on http://${HOST}:${PORT}`);
-  console.log(`🌐 Also accessible at http://10.97.16.24:${PORT}`);
-  console.log(`🔌 Socket.IO server ready for connections`);
-});
+// Helper function to clean player data for socket transmission
+const cleanPlayerData = (players) => {
+  return players.map(p => ({
+    id: p.id,
+    user_id: p.user_id,
+    username: p.username,
+    role: p.role,
+    roleIcon: p.roleIcon,
+    score: p.score,
+    is_eliminated: p.is_eliminated,
+    bombs_defused: p.bombs_defused || 0,
+    bombs_failed: p.bombs_failed || 0,
+    disconnected: p.disconnected || false
+  }));
+};
+
+// Only start server if not in Vercel serverless environment
+if (process.env.VERCEL !== '1') {
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`✅ Server running on http://${HOST}:${PORT}`);
+    console.log(`🌐 Also accessible at http://10.97.16.24:${PORT}`);
+    console.log(`🔌 Socket.IO server ready for connections`);
+  });
+}
+
+// Export for Vercel serverless function
+export default httpServer;

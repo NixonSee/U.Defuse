@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files (use Vercel env vars instead)
+.env
+.env.local
+.env.*.local
+
+# Development
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Build artifacts (will be rebuilt)
+client/dist
+client/.vite
+client/node_modules
+
+# Server development
+server/node_modules
+
+# Git
+.git
+.gitignore
+
+# Testing
+coverage
+*.test.js
+*.spec.js
+
+# Documentation
+README.md
+VERCEL_DEPLOYMENT.md
+
+# Database
+server/database/*.sql
+
+# Certificates
+client/certs

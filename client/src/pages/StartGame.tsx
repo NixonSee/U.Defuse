@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import socketService from "../utils/socket";
+import { ToastContainer } from "../components/Toast";
 
 interface Player {
   id: number;
@@ -16,8 +17,21 @@ const StartGame: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [currentSocketId, setCurrentSocketId] = useState<string>("");
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string; type?: "success" | "error" | "warning" | "info" }>>([]);
+  const [toastIdCounter, setToastIdCounter] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const addToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
+    const id = toastIdCounter;
+    setToastIdCounter(prev => prev + 1);
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
 
   useEffect(() => {
     // Get current user
@@ -82,21 +96,45 @@ const StartGame: React.FC = () => {
 
         socketService.onRoomError((data) => {
           console.error("Room error:", data.message);
-          alert(data.message);
-          navigate("/Lobby");
+          addToast(data.message, "error");
+          setTimeout(() => navigate("/Lobby"), 2000);
         });
 
         socketService.onRoomClosed((data) => {
           console.log("Room closed:", data.message);
-          alert(data.message);
-          navigate("/Lobby");
+          addToast(data.message, "warning");
+          setTimeout(() => navigate("/Lobby"), 2000);
         });
 
         socketService.onGameStarted((data) => {
-          console.log("Game started:", data);
-          // TODO: Navigate to actual game page
-          alert("Game is starting!");
+          console.log("🎮 Game started!", data);
+          setGameStarted(true);
+          // Navigate to game dashboard with game state
+          navigate('/game-dashboard', {
+            state: {
+              gameSessionId: data.gameSessionId,
+              roomCode: data.roomCode,
+              players: data.players,
+              currentTurn: data.currentTurn
+            }
+          });
         });
+
+        // Connection status listeners
+        const currentSocket = socketService.getSocket();
+        if (currentSocket) {
+          currentSocket.on('disconnect', () => {
+            console.log('🔌 Disconnected from server');
+            addToast('Connection lost, reconnecting...', 'warning');
+          });
+
+          currentSocket.on('connect', () => {
+            console.log('🔌 Reconnected to server');
+            if (currentSocketId) {
+              addToast('Reconnected!', 'success');
+            }
+          });
+        }
 
         // Small delay to ensure listeners are set up
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -131,8 +169,14 @@ const StartGame: React.FC = () => {
     initSocket();
 
     return () => {
-      // Leave room when component unmounts
-      socketService.leaveRoom();
+      // Only leave room when component unmounts if game hasn't started
+      // If game started, the room should be preserved
+      if (!gameStarted) {
+        console.log("🚪 Leaving room on unmount (game not started)");
+        socketService.leaveRoom();
+      } else {
+        console.log("🎮 Game started - preserving room on unmount");
+      }
       
       // Cleanup socket listeners
       socketService.removeListener("roomCreated");
@@ -143,7 +187,7 @@ const StartGame: React.FC = () => {
       socketService.removeListener("roomClosed");
       socketService.removeListener("gameStarted");
     };
-  }, [navigate, location]);
+  }, [navigate, location, gameStarted]);
 
   // Room code generator
   const generateRoomCode = (): string => {
@@ -172,6 +216,9 @@ const StartGame: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#060606] text-yellow-400 font-sans relative overflow-hidden">
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
       {/* Background effects */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,0,0.05)_0%,transparent_30%)]"></div>
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-size-[40px_40px] opacity-40"></div>
@@ -254,7 +301,7 @@ const StartGame: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {players.map((player, index) => (
                 <div
-                  key={player.id}
+                  key={`${player.id}-${player.socketId}`}
                   className="relative bg-black/40 border-2 rounded-xl p-6 transition-all hover:scale-105"
                   style={{
                     borderColor: player.color,

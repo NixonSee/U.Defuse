@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { socket } from '../utils/socket';
 
 interface QuizQuestion {
@@ -18,6 +18,7 @@ interface QuizQuestion {
 const BombQuiz: React.FC = () => {
   const navigate = useNavigate();
   const { gameSessionId } = useParams<{ gameSessionId: string }>();
+  const location = useLocation();
   const [question, setQuestion] = useState<QuizQuestion | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(30);
   const [bonusTime, setBonusTime] = useState(0);
@@ -26,6 +27,37 @@ const BombQuiz: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<any>(null);
+  const useHackerAbility = location.state?.useHackerAbility || false;
+  const navigationTimeoutRef = React.useRef<number | null>(null);
+  const gameEndedRef = React.useRef(false);
+
+  // Sound effects
+  const playSound = (type: 'correct' | 'wrong') => {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    if (type === 'correct') {
+      // Success sound
+      oscillator.frequency.value = 523.25; // C5
+      oscillator.type = 'sine';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } else {
+      // Failure sound
+      oscillator.frequency.value = 200;
+      oscillator.type = 'sawtooth';
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.8);
+    }
+  };
 
   useEffect(() => {
     // Trigger bomb scan when component mounts
@@ -38,6 +70,21 @@ const BombQuiz: React.FC = () => {
       setTimerSeconds(data.timerSeconds);
       setBonusTime(data.bonusTime);
       setStartTime(Date.now());
+      
+      // If using hacker ability, auto-submit immediately
+      if (useHackerAbility) {
+        console.log('🔓 Auto-submitting with Hacker ability');
+        setTimeout(() => {
+          socket.emit('answerQuiz', {
+            gameSessionId: Number(gameSessionId),
+            questionId: data.question.id,
+            answer: data.question.correct_answer, // Hacker gets correct answer
+            timeTaken: 0,
+            usedHackerAbility: true
+          });
+          setIsSubmitting(true);
+        }, 500);
+      }
     });
 
     // Listen for quiz result
@@ -47,43 +94,54 @@ const BombQuiz: React.FC = () => {
       setShowResult(true);
       setIsSubmitting(false);
       
-      // Auto-navigate back to dashboard after showing result
-      setTimeout(() => {
-        if (data.success) {
-          navigate('/game-dashboard', { replace: true });
-        } else if (!data.eliminated) {
-          // Show option to use Defuse card
-          const confirm = window.confirm(
-            'Wrong answer! Use your Defuse card to survive? (+5 points)\n\nClick OK to use Defuse card, or Cancel to be eliminated.'
-          );
-          
-          if (confirm) {
-            socket.emit('useDefuseCard', { gameSessionId: Number(gameSessionId) });
-            
-            // Listen for confirmation
-            socket.once('defuseCardUsed', () => {
-              alert('Defuse card used! You survived! +5 points');
-              navigate('/game-dashboard', { replace: true });
-            });
-            
-            socket.once('gameError', (error) => {
-              alert(error.message || 'No Defuse card available. You are eliminated!');
-              socket.emit('playerEliminated', { gameSessionId: Number(gameSessionId) });
-              navigate('/game-dashboard', { replace: true });
-            });
-          } else {
-            // Player eliminated
-            socket.emit('playerEliminated', { gameSessionId: Number(gameSessionId) });
-            alert('You have been eliminated!');
-            navigate('/game-dashboard', { replace: true });
-          }
+      // Play sound effect
+      playSound(data.success ? 'correct' : 'wrong');
+      
+      // Auto-close and navigate back after 3 seconds (unless game has ended)
+      navigationTimeoutRef.current = window.setTimeout(() => {
+        if (!gameEndedRef.current) {
+          navigate('/game-dashboard', {
+            replace: true,
+            state: { 
+              fromQuiz: true,
+              gameSessionId: Number(gameSessionId),
+              roomCode: sessionStorage.getItem('currentRoomCode')
+            }
+          });
         }
-      }, 2000);
+      }, 3000);
+    });
+
+    // Listen for game end (if eliminated player is last one standing)
+    socket.on('gameEnded', (data) => {
+      console.log('🏆 Game ended while in quiz:', data);
+      gameEndedRef.current = true;
+      
+      // Cancel the 3-second navigation timeout
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+      
+      // Navigate to dashboard immediately so winner screen can show
+      navigate('/game-dashboard', {
+        replace: true,
+        state: { 
+          fromQuiz: true,
+          gameSessionId: Number(gameSessionId),
+          roomCode: sessionStorage.getItem('currentRoomCode'),
+          gameEnded: true
+        }
+      });
     });
 
     return () => {
+      // Clear navigation timeout on unmount
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
       socket.off('bombQuiz');
       socket.off('quizResult');
+      socket.off('gameEnded');
     };
   }, [gameSessionId, navigate]);
 
@@ -111,18 +169,33 @@ const BombQuiz: React.FC = () => {
     setIsSubmitting(true);
     const timeTaken = Math.floor((Date.now() - startTime) / 1000);
     
-    socket.emit('answerQuiz', {
+    const payload = {
       gameSessionId: Number(gameSessionId),
       questionId: question.id,
       answer: selectedAnswer,
       timeTaken,
       usedHackerAbility: false
+    };
+    
+    console.log('📤 Submitting answer:', payload);
+    console.log('Question details:', {
+      questionId: question.id,
+      selectedAnswer,
+      correctAnswer: question.correct_answer,
+      options: {
+        A: question.option_a,
+        B: question.option_b,
+        C: question.option_c,
+        D: question.option_d
+      }
     });
+    
+    socket.emit('answerQuiz', payload);
   };
 
   if (!question) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center">
         <div className="text-white text-2xl">Loading bomb quiz...</div>
       </div>
     );
@@ -141,7 +214,7 @@ const BombQuiz: React.FC = () => {
   const timerColor = timerSeconds <= 10 ? 'bg-red-500' : timerSeconds <= 20 ? 'bg-yellow-500' : 'bg-green-500';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 p-4">
+    <div className="min-h-screen bg-linear-to-br from-gray-900 via-red-900 to-gray-900 p-4">
       <div className="max-w-4xl mx-auto">
         {/* Timer */}
         <div className="bg-black/40 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-red-500/50">

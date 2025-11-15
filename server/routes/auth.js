@@ -114,6 +114,17 @@ router.post("/login", async (req, res) => {
       }
 
       const user = results[0];
+      // Debug: log keys to understand schema
+      console.log('🔎 Login DB row keys:', Object.keys(user));
+      
+      // Support different ID column names (id vs user_id)
+      const userId = user.id ?? user.user_id ?? user.ID ?? user.userid ?? user.userId;
+      const idColumn = ("id" in user) ? "id" : (("user_id" in user) ? "user_id" : "id");
+      
+      if (!userId) {
+        console.error('❌ User row missing id field. Row:', user);
+        return res.status(500).json({ error: 'User record missing id field' });
+      }
       
       try {
         const match = await bcrypt.compare(password, user.password);
@@ -125,7 +136,7 @@ router.post("/login", async (req, res) => {
         // Generate JWT token with user data
         const token = jwt.sign(
           { 
-            id: user.id,
+            id: userId,
             username: user.username,
             email: user.email
           }, 
@@ -134,7 +145,7 @@ router.post("/login", async (req, res) => {
         );
 
         // Update last login
-        db.query("UPDATE users SET last_login = NOW() WHERE id = ?", [user.id], (updateErr) => {
+        db.query(`UPDATE users SET last_login = NOW() WHERE ${idColumn} = ?`, [userId], (updateErr) => {
           if (updateErr) console.error("Failed to update last login:", updateErr);
         });
 
@@ -153,10 +164,18 @@ router.post("/login", async (req, res) => {
         
         res.cookie('auth_token', token, cookieOptions);
 
+        // Debug: log login result and cookie set
+        console.log('🔐 Login success - issuing JWT cookie', {
+          userId: userId,
+          username: user.username,
+          email: user.email,
+          cookieOptions
+        });
+
         res.json({ 
           message: "Login successful",
           user: {
-            id: user.id,
+            id: userId,
             username: user.username,
             email: user.email
           }
@@ -183,6 +202,12 @@ router.get("/verify", authenticateToken, (req, res) => {
       email: req.user.email
     }
   });
+});
+
+// WHOAMI - Quick debug to check user id from JWT cookie
+router.get('/whoami', authenticateToken, (req, res) => {
+  console.log('👤 /whoami hit. User from JWT:', req.user);
+  res.json({ user: req.user });
 });
 
 // GET USER PROFILE

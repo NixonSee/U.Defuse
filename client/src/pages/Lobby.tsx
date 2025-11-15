@@ -152,7 +152,7 @@ const Lobby: React.FC = () => {
     <div className="min-h-screen bg-[#060606] text-yellow-400 font-sans relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,0,0.05)_0%,transparent_30%)]"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-size-[40px_40px] opacity-40"></div>
 
       {/* Header */}
       <div className="relative z-10 flex justify-between items-center p-4 sm:p-6 border-b border-yellow-400/20">
@@ -314,7 +314,7 @@ const Lobby: React.FC = () => {
               <button
                 onClick={sendMessage}
                 disabled={!isConnected || !newMessage.trim()}
-                className="bg-yellow-400/90 hover:bg-yellow-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold px-2 sm:px-4 py-2 rounded-lg transition-all text-sm whitespace-nowrap flex-shrink-0"
+                className="bg-yellow-400/90 hover:bg-yellow-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold px-2 sm:px-4 py-2 rounded-lg transition-all text-sm whitespace-nowrap shrink-0"
               >
                 Send
               </button>

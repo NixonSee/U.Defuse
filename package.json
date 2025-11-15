@@ -1,5 +1,5 @@
 {
-  "name": "vite-fullstack-app",
+  "name": "u-defuse",
   "version": "1.0.0",
   "scripts": {
     "dev": "concurrently --names \"SERVER,CLIENT\" --prefix \"[{name}]\" --prefix-colors \"cyan,green\" \"npm run server\" \"npm run client\"",
@@ -7,7 +7,9 @@
     "server": "cd server && npm run start",
     "install-client": "cd client && npm install",
     "install-server": "cd server && npm install",
-    "install-all": "npm install && npm run install-client && npm run install-server"
+    "install-all": "npm install && npm run install-client && npm run install-server",
+    "build": "cd client && npm install && npm run build",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "init": "^0.1.2",

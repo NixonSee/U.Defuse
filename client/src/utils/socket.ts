@@ -21,7 +21,7 @@ class SocketService {
           );
           if (isLocal) return `http://${hostname}:5000`;
 
-          // Production default: same origin (avoids mixed-content/CSP issues)
+          // Production: Vercel deployment - use same origin
           return window.location.origin;
         };
         const socketUrl = resolveSocketUrl();
@@ -30,9 +30,10 @@ class SocketService {
         // Create socket connection - cookies will be sent automatically
         this.socket = io(socketUrl, {
           withCredentials: true, // Enable sending cookies
-          transports: ['websocket', 'polling'],
+          transports: ['polling', 'websocket'], // Try polling first for Vercel
           timeout: 20000,
-          forceNew: true
+          forceNew: true,
+          path: '/socket.io/'
         });
 
         // Connection successful

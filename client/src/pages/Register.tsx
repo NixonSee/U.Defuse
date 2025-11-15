@@ -59,7 +59,7 @@ const Register: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#060606] overflow-hidden relative font-sans">
       {/* === Background Effects === */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,0,0.05)_0%,transparent_30%)]"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-size-[40px_40px] opacity-40"></div>
 
       {/* Glowing border frame (same as login, synced animation) */}
       <div className="absolute -inset-2 rounded-2xl blur-xl bg-yellow-500/10 animate-borderPulse"></div>

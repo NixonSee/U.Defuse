@@ -6,6 +6,15 @@ import path from 'path'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
   server: {
     host: '0.0.0.0', // Allow external connections
     port: 5173,      // Default Vite port

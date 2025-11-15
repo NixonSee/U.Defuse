@@ -2,7 +2,6 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
 import Lobby from "./pages/Lobby";
 import QRLogin from "./pages/QRLogin";
 import History from "./pages/History";
@@ -19,7 +18,6 @@ const App: React.FC = () => {
       <Route path="/Lobby" element={<Lobby />} />
       <Route path="/Login" element={<Login />} />
       <Route path="/Register" element={<Register />} />
-      <Route path="/ForgotPassword" element={<ForgotPassword />} />
       <Route path="/QRLogin" element={<QRLogin />} />
       <Route path="/History" element={<History />} />
       <Route path="/Settings" element={<Settings />} />

@@ -35,7 +35,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#060606] overflow-hidden relative font-sans">
       {/* Animated circuit grid background */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,0,0.05)_0%,transparent_30%)]"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-40"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-size-[40px_40px] opacity-40"></div>
 
       {/* Glowing border frame */}
       <div className="absolute -inset-2 rounded-2xl blur-xl bg-yellow-500/10 animate-borderPulse"></div>
@@ -101,12 +101,9 @@ const Login: React.FC = () => {
 
           {/* Forgot Password */}
           <div className="flex justify-left">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-yellow-400 hover:text-yellow-300 transition-all"
-            >
+            <span className="text-sm text-gray-500 cursor-not-allowed">
               Forgot Password?
-            </Link>
+            </span>
           </div>
 
           {/* Error Message */}
