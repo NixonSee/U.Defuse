@@ -150,14 +150,14 @@ router.post("/login", async (req, res) => {
         });
 
         // Set JWT as HTTP-only cookie
-        // Use 'none' only for production HTTPS cross-origin; 'lax' for local (including local network)
+        // Production: use 'none' + secure for cross-origin (Vercel→Render)
+        // Local: use 'lax' for same-origin dev
         const isProd = process.env.NODE_ENV === 'production';
         
-        // For local network access, don't set domain so cookie works on IP addresses
         const cookieOptions = {
           httpOnly: true,
-          secure: isProd,
-          sameSite: 'lax', // Always 'lax' for local dev (works on mobile too)
+          secure: isProd, // HTTPS required in production
+          sameSite: isProd ? 'none' : 'lax', // 'none' allows cross-origin cookies
           maxAge: 24 * 60 * 60 * 1000, // 24 hours
           path: '/'
         };
@@ -233,7 +233,7 @@ router.post("/logout", (req, res) => {
   res.clearCookie('auth_token', {
     httpOnly: true,
     secure: isProd,
-    sameSite: 'lax',
+    sameSite: isProd ? 'none' : 'lax',
     path: '/'
   });
   
