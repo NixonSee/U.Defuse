@@ -810,6 +810,35 @@ io.on("connection", (socket) => {
                 reason: endCheck.reason,
                 finalScores: cleanPlayerData(gameState.players)
               });
+            } else {
+              // Game continues - pass turn to next alive player
+              const room = gameRooms.get(socket.roomCode);
+              if (room) {
+                const currentTurnIndex = room.currentTurn !== undefined ? room.currentTurn : 0;
+                let nextTurnIndex = (currentTurnIndex + 1) % gameState.players.length;
+                let attempts = 0;
+                
+                // Skip eliminated or disconnected players
+                while (attempts < gameState.players.length) {
+                  const nextPlayer = gameState.players[nextTurnIndex];
+                  const roomPlayer = room.players.find(p => p.id === nextPlayer.user_id);
+                  
+                  if (!nextPlayer.is_eliminated && !roomPlayer?.disconnected) {
+                    break;
+                  }
+                  
+                  nextTurnIndex = (nextTurnIndex + 1) % gameState.players.length;
+                  attempts++;
+                }
+                
+                room.currentTurn = nextTurnIndex;
+                console.log(`⏭️ ${socket.username} eliminated - passing turn to ${gameState.players[nextTurnIndex].username}`);
+                
+                io.to(socket.roomCode).emit("turnChanged", {
+                  currentTurn: nextTurnIndex,
+                  nextPlayer: gameState.players[nextTurnIndex]
+                });
+              }
             }
           }
         }
@@ -898,6 +927,35 @@ io.on("connection", (socket) => {
             reason: endCheck.reason,
             finalScores: cleanPlayerData(gameState.players)
           });
+        } else {
+          // Game continues - pass turn to next alive player
+          const room = gameRooms.get(socket.roomCode);
+          if (room) {
+            const currentTurnIndex = room.currentTurn !== undefined ? room.currentTurn : 0;
+            let nextTurnIndex = (currentTurnIndex + 1) % gameState.players.length;
+            let attempts = 0;
+            
+            // Skip eliminated or disconnected players
+            while (attempts < gameState.players.length) {
+              const nextPlayer = gameState.players[nextTurnIndex];
+              const roomPlayer = room.players.find(p => p.id === nextPlayer.user_id);
+              
+              if (!nextPlayer.is_eliminated && !roomPlayer?.disconnected) {
+                break;
+              }
+              
+              nextTurnIndex = (nextTurnIndex + 1) % gameState.players.length;
+              attempts++;
+            }
+            
+            room.currentTurn = nextTurnIndex;
+            console.log(`⏭️ ${socket.username} eliminated - passing turn to ${gameState.players[nextTurnIndex].username}`);
+            
+            io.to(socket.roomCode).emit("turnChanged", {
+              currentTurn: nextTurnIndex,
+              nextPlayer: gameState.players[nextTurnIndex]
+            });
+          }
         }
       }
       
