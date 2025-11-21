@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { socket } from '../utils/socket';
 import { ToastContainer } from '../components/Toast';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface Player {
   id: number;
@@ -51,6 +52,7 @@ const GameDashboard: React.FC = () => {
   const [lobbyCountdown, setLobbyCountdown] = useState(10);
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type?: "success" | "error" | "warning" | "info" }>>([]);
   const [toastIdCounter, setToastIdCounter] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
 
   const addToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
     const id = toastIdCounter;
@@ -340,6 +342,31 @@ const GameDashboard: React.FC = () => {
     });
   };
 
+  const handleQRCodeScanned = (result: any) => {
+    if (!result || !result[0]?.rawValue) return;
+
+    const decodedText = result[0].rawValue;
+    console.log('✅ QR Code scanned:', decodedText);
+
+    // Extract session ID from URL if it's a bomb quiz URL
+    if (decodedText.includes('/bomb-quiz/')) {
+      const sessionId = decodedText.split('/bomb-quiz/')[1];
+      if (sessionId) {
+        setIsScanning(false);
+        navigate(`/bomb-quiz/${sessionId}`);
+        return;
+      }
+    }
+
+    // If it's just the session ID
+    if (!isNaN(Number(decodedText))) {
+      setIsScanning(false);
+      navigate(`/bomb-quiz/${decodedText}`);
+    } else {
+      addToast('Invalid QR code', 'error');
+    }
+  };
+
   if (!gameState) {
     return (
       <div className="min-h-screen bg-linear-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
@@ -543,6 +570,50 @@ const GameDashboard: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* QR Scanner Section */}
+        <div className="bg-[#0d0d0f]/80 border-2 border-yellow-400/30 rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-6 backdrop-blur-md mt-6">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-yellow-400 mb-3 sm:mb-4 text-center">
+            📷 SCAN QR CODE 📷
+          </h2>
+
+          {!isScanning ? (
+            <div className="text-center">
+              <p className="text-gray-300 mb-4 text-sm sm:text-base">Scan a bomb QR code to start defusing</p>
+              <button
+                onClick={() => setIsScanning(true)}
+                disabled={currentPlayer?.is_eliminated}
+                className="bg-blue-600/80 hover:bg-blue-700 text-white font-bold py-2 sm:py-3 px-6 sm:px-8 rounded-xl text-base sm:text-lg border-2 border-blue-400/50 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                📷 Start Scanner
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="rounded-xl overflow-hidden mb-4 border-2 border-yellow-400/40 max-w-md mx-auto">
+                <Scanner
+                  onScan={handleQRCodeScanned}
+                  onError={(err) => console.error('Scanner error:', err)}
+                  constraints={{ facingMode: 'environment' }}
+                  styles={{
+                    container: { width: '100%' },
+                    video: { width: '100%', borderRadius: '8px' },
+                  }}
+                />
+              </div>
+              <button
+                onClick={() => setIsScanning(false)}
+                className="w-full max-w-md mx-auto block bg-red-600/80 hover:bg-red-700 text-white font-bold py-2 sm:py-3 px-6 sm:px-8 rounded-xl text-base sm:text-lg border-2 border-red-400/50 transition-all hover:scale-105 active:scale-95"
+              >
+                ⏹️ Stop Scanner
+              </button>
+            </div>
+          )}
+
+          <p className="text-gray-400 text-xs text-center mt-3 sm:mt-4">
+            💡 Point your camera at the bomb QR code to defuse
+          </p>
         </div>
 
         {/* Warning Message */}
