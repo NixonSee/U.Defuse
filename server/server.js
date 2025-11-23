@@ -345,7 +345,8 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       color: playerColors[0],
       isReady: true,
-      isHost: true
+      isHost: true,
+      disconnected: false // Explicitly set as connected when creating room
     };
     
     console.log('✅ Creating host player:', hostPlayer);
@@ -419,7 +420,8 @@ io.on("connection", (socket) => {
       socketId: socket.id,
       color: playerColors[room.players.length],
       isReady: false,
-      isHost: false
+      isHost: false,
+      disconnected: false // Explicitly set as connected when joining
     };
     
     room.players.push(newPlayer);
@@ -463,17 +465,15 @@ io.on("connection", (socket) => {
       console.log(`🔄 Updating socket ID for ${socket.username} in room ${roomCode}`);
       existingPlayer.socketId = socket.id;
       
-      // Mark player as reconnected
-      if (existingPlayer.disconnected) {
-        existingPlayer.disconnected = false;
-        console.log(`✅ ${socket.username} reconnected to active game`);
-        
-        // Notify other players about reconnection
-        io.to(roomCode).emit("playerReconnected", {
-          playerId: existingPlayer.id,
-          username: socket.username
-        });
-      }
+      // Mark player as reconnected (always set to false when rejoining)
+      existingPlayer.disconnected = false;
+      console.log(`✅ ${socket.username} socket updated and marked as connected in room`);
+      
+      // Notify other players about reconnection
+      io.to(roomCode).emit("playerReconnected", {
+        playerId: existingPlayer.id,
+        username: socket.username
+      });
     }
     
     // Rejoin the Socket.IO room
@@ -514,17 +514,26 @@ io.on("connection", (socket) => {
           return; // Don't send regular game state sync
         }
         
+        // Merge disconnected status from room's player list into game state players
+        const playersWithConnectionStatus = gameState.players.map(dbPlayer => {
+          const roomPlayer = room.players.find(rp => rp.id === dbPlayer.user_id);
+          return {
+            ...dbPlayer,
+            disconnected: roomPlayer?.disconnected || false
+          };
+        });
+        
         const syncData = {
           gameSessionId: room.gameSessionId,
           roomCode: roomCode,
-          players: cleanPlayerData(gameState.players),
+          players: cleanPlayerData(playersWithConnectionStatus),
           currentTurn: room.currentTurn,
           status: 'in_progress'
         };
         
         console.log(`🔄 Syncing game state to all players in room ${roomCode}`);
         console.log(`🔄 Current turn: ${room.currentTurn}`);
-        console.log(`🔄 Players:`, gameState.players.map(p => ({ username: p.username, score: p.score })));
+        console.log(`🔄 Players:`, playersWithConnectionStatus.map(p => ({ username: p.username, score: p.score, disconnected: p.disconnected })));
         
         // Send to ALL players in the room to ensure everyone is in sync
         io.to(roomCode).emit("gameStateSync", syncData);
